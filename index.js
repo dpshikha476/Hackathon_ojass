@@ -3,13 +3,15 @@ const app = express()
 const path = require('path')
 const cors = require('cors')
 require('dotenv').config()
-const pdfMake = require('pdfmake')
 const mailer = require('./module/mailer')
 const dbConn = require('./config/dbConfig')
+const pdf = require("pdf-creator-node");
+const host = '0.0.0.0'
+const PORT = process.env.PORT
+
 const puppeteer = require('puppeteer');
 const handlebars = require("handlebars");
 const fs = require("fs");
-const PORT = 3000 || process.env.PORT
 
 const _ = require("lodash")
 const user = require('./db/user')
@@ -29,8 +31,8 @@ app.get('/',(req,res)=>{
 app.post('/prescription/',(req,res)=>{
  data = req.body
  try{
-    dbConn.query("INSERT INTO patient (pName,pNumber,pEmail,dName) VALUES (?,?,?,?)",
-    [data.patient_name, data.patient_phone, data.patient_email, data.doctor_name],(err,result)=>{
+    dbConn.query("INSERT INTO patient (pName,pNumber,pEmail,dName,link) VALUES (?,?,?,?,?)",
+    [data.patient_name, data.patient_phone, data.patient_email, data.doctor_name, ''],(err,result)=>{
     if(err)
     console.log(err)
     else{
@@ -43,58 +45,59 @@ app.post('/prescription/',(req,res)=>{
  res.render('prescription',{ data })
 })
 
-app.use('/pdfFromHTML/:id', function(req, res){
-  let id = req.params.id
+app.use('/pdfFromHTML/:id', async function(req, res){
 
-  var templateHtml = fs.readFileSync(path.join(process.cwd(), 'prescription'), 'utf8');
-  var template = handlebars.compile(templateHtml);
-  var finalHtml = encodeURIComponent(template(dataBinding));
-  var options = {
-      format: 'A4',
-      headerTemplate: "<p></p>",
-      footerTemplate: "<p></p>",
-      displayHeaderFooter: true,
-      margin: {
-          top: "40px",
-          bottom: "100px"
-      },
-      printBackground: true,
-      path: 'prescription.pdf'
-  }
+   console.log(req.body)
+   let id = req.params.id
+   let url = req.protocol+"://"+req.headers.host+"/"+'pdfFromHTML'+"/"+id+'?'
 
-  const browser = await puppeteer.launch({
-      args: ['--no-sandbox'],
-      headless: true
+   let html = fs.readFileSync("template.html", "utf8");
+   var options = {
+    format: "A3",
+    orientation: "portrait",
+    border: "10mm",
+    header: {
+        height: "45mm",
+        contents: '<div style="text-align: center;">Doctor Prescription</div>'
+    },
+    footer: {
+        height: "28mm",
+        contents: {
+            first: 'Cover page',
+            default: '<span style="color: #444;">{{page}}</span>/<span>{{pages}}</span>', // fallback value
+            last: 'Last Page'
+        }
+    }
+};
+var users = [
+  {
+    name: "Shyam",
+    age: "26",
+  },
+  {
+    name: "Navjot",
+    age: "26",
+  },
+  {
+    name: "Vitthal",
+    age: "26",
+  },
+];
+var document = {
+  html: html,
+  data: {
+    users: users,
+  },
+  path: "./output.pdf",
+  type: "",
+};
+pdf.create(document, options)
+  .then((res) => {
+    console.log(res);
+  })
+  .catch((error) => {
+    console.error(error);
   });
-  const page = await browser.newPage();
-  await page.goto(`data:text/html;charset=UTF-8,${finalHtml}`, {
-      waitUntil: 'networkidle0'
-  });
-  await page.pdf(options);
-  await browser.close();
-
-  console.log('Done: pdf is created!')
-
-  //  console.log(req.body)
-  //  let id = req.params.id
-  //  let url = req.protocol+"://"+req.headers.host+"/"+'pdfFromHTML'+"/"+id+'?'
-  //  let documentDef = {
-  //    content :[
-  //      `${req.body}`
-  //    ]
-  //  }
-  //  const pdfDoc = pdfMake.createPdf(documentDef)
-  //  pdfDoc.getBase64((data)=>{
-  //    res.writeHead(200,
-  //     {
-  //        'Content-Type':'application/pdf',
-  //        'Content-Disposition':"attachmnet;filename-'filename.pdf'"
-  //     })
-  //     const download = Buffer.from(data.toString('utf-8'),'base-64')
-  //     res.end(download)
-   })
-
-
 
 //   try{
 //     dbConn.query(`UPDATE patient SET link = '${url}' WHERE pNumber = ${id}`,(err,result)=>{
@@ -107,14 +110,29 @@ app.use('/pdfFromHTML/:id', function(req, res){
 //  catch(e){
 //    console.log(e)
 //  }
-  user.addValues()
+//   user.addValues()
   // mailer(url.toString())
   // console.log(data)
   
 })
 
+app.get('/panelist/:dName',(req,res)=>{
+  let data = null
+  try{
+    dbConn.query(`SELECT * FROM patient WHERE dName = '${req.params.dName}'`,(err,result)=>{
+    if(err)
+    console.log(err)
+    else{
+      console.log("done",result)
+      res.render('panelist',{result})
+    }
+ })}
+ catch(e){
+   console.log(e)
+ }
 
+})
 
-app.listen(PORT,()=>{
+app.listen(3000,host,()=>{
     console.log("listening to port 3000")
 })
